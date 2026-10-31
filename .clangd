@@ -1,0 +1,10 @@
+CompileFlags:
+  Add:
+    - -std=c99
+    - -Wall
+    - -Wextra
+    - -Iinclude
+    - -ID:/Projects/Maze Escape with Intelligent Enemies/include
+    - -IC:/raylib/raylib/include
+  Compiler: C:/w64devkit_temp/w64devkit/bin/gcc.exe
+
