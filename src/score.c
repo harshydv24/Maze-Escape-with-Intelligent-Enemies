@@ -47,12 +47,19 @@ void quickSortScores(ScoreEntry a[], int lo, int hi)
 
 int loadHighScores(ScoreEntry s[], int max)
 {
+    if (!s || max <= 0) return 0;
+
     FILE *f = fopen(HIGHSCORE_FILE_PATH, "rb");
     if (!f) return 0;
     int n = 0;
-    if (fread(&n, sizeof(int), 1, f) != 1) { fclose(f); return 0; }
-    if (n > max) n = max;
-    fread(s, sizeof(ScoreEntry), n, f);
+    if (fread(&n, sizeof(int), 1, f) != 1 || n < 0 || n > max) {
+        fclose(f);
+        return 0;
+    }
+    if (n > 0 && fread(s, sizeof(ScoreEntry), (size_t)n, f) != (size_t)n) {
+        fclose(f);
+        return 0;
+    }
     fclose(f);
     return n;
 }

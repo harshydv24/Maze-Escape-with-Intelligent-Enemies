@@ -175,25 +175,61 @@ static int manDist(GridNode a, GridNode b)
     return dx + dy;
 }
 
-void placeMazeObjects(Maze *maze, int keyCount)
+bool placeMazeObjects(Maze *maze, int keyCount)
 {
-    maze->start = (GridNode){ 1, 1 };
-    maze->grid[1][1] = CELL_START;
+    GridNode *keys = NULL;
 
+    if (!maze || !maze->grid || maze->width < 3 || maze->height < 3 ||
+        keyCount < 0 || keyCount > maze->width * maze->height)
+        return false;
+
+    if (keyCount > 0) {
+        keys = (GridNode *)malloc(sizeof(GridNode) * keyCount);
+        if (!keys) return false;
+    }
+
+    maze->start = (GridNode){ 1, 1 };
     maze->exitPos = (GridNode){ maze->width - 2, maze->height - 2 };
-    maze->grid[maze->height - 2][maze->width - 2] = CELL_EXIT;
+
+    if (!isCellWalkable(maze, maze->start.x, maze->start.y) ||
+        !isCellWalkable(maze, maze->exitPos.x, maze->exitPos.y)) {
+        free(keys);
+        return false;
+    }
 
     free(maze->keys);
-    maze->keyCount = keyCount;
-    maze->keys = (GridNode *)malloc(sizeof(GridNode) * keyCount);
-    if (!maze->keys) { maze->keyCount = 0; return; }
+    maze->keys = NULL;
+    maze->keyCount = 0;
 
     for (int i = 0; i < keyCount; i++) {
-        GridNode pos; int att = 0;
-        do { pos = randomPathCell(maze); att++; }
-        while ((manDist(pos, maze->start) < 8 ||
-                maze->grid[pos.y][pos.x] != CELL_PATH) && att < 10000);
-        maze->keys[i] = pos;
-        maze->grid[pos.y][pos.x] = CELL_KEY;
+        GridNode pos; int att = 0; bool valid = false;
+        while (att < 10000) {
+            pos = randomPathCell(maze);
+            att++;
+            if (pos.x >= 0 && pos.x < maze->width &&
+                pos.y >= 0 && pos.y < maze->height &&
+                maze->grid[pos.y][pos.x] == CELL_PATH &&
+                manDist(pos, maze->start) >= 8 &&
+                (pos.x != maze->exitPos.x || pos.y != maze->exitPos.y)) {
+                valid = true;
+                for (int j = 0; j < i; j++)
+                    if (keys[j].x == pos.x && keys[j].y == pos.y)
+                        valid = false;
+                if (valid) break;
+            }
+        }
+        if (!valid) {
+            free(keys);
+            return false;
+        }
+        keys[i] = pos;
     }
+
+    maze->grid[maze->start.y][maze->start.x] = CELL_START;
+    maze->grid[maze->exitPos.y][maze->exitPos.x] = CELL_EXIT;
+    for (int i = 0; i < keyCount; i++)
+        maze->grid[keys[i].y][keys[i].x] = CELL_KEY;
+    maze->keys = keys;
+    maze->keyCount = keyCount;
+    return true;
 }

@@ -1,40 +1,97 @@
 # Makefile for Maze Escape with Intelligent Enemies
-# Compiler: w64devkit GCC (or any MinGW-w64 GCC)
-# Library:  raylib (installed at C:/raylib/raylib)
-#
-# If w64devkit is installed, prepend its bin/ to your PATH:
-#   set PATH=C:\w64devkit_temp\w64devkit\bin;%PATH%
+# Override paths as needed, for example:
+#   make CC=gcc RAYLIB=/opt/raylib
 
-CC       = C:/w64devkit_temp/w64devkit/bin/gcc
-RAYLIB   = C:/raylib/raylib
-W64BIN   = C:/w64devkit_temp/w64devkit/bin
+ifeq ($(OS),Windows_NT)
+ifeq ($(origin CC),default)
+CC = C:/w64devkit_temp/w64devkit/bin/gcc
+endif
+RAYLIB ?= C:/raylib/raylib
+W64BIN ?= C:/w64devkit_temp/w64devkit/bin
+TARGET ?= MazeEscape.exe
+RUN_PREFIX ?=
+else
+ifeq ($(origin CC),default)
+CC = gcc
+endif
+RAYLIB ?= /usr/local
+W64BIN ?=
+TARGET ?= MazeEscape
+RUN_PREFIX ?= ./
+endif
 
-CFLAGS   = -B$(W64BIN) -Wall -Wextra -std=c99 -O2 -Iinclude -I$(RAYLIB)/include
-LDFLAGS  = -B$(W64BIN) -L$(RAYLIB)/lib -lraylib -lopengl32 -lgdi32 -lwinmm
+RAYLIB_INCLUDE ?= $(RAYLIB)/include
+RAYLIB_LIB ?= $(RAYLIB)/lib
+BUILD_DIR ?= build
+SAVE_DIR ?= saves
+TEST_TARGET ?= $(BUILD_DIR)/maze_tests
+PERSISTENCE_TEST_TARGET ?= $(BUILD_DIR)/persistence_tests
+SANITIZER_TEST_TARGET ?= $(BUILD_DIR)/maze_tests_sanitize
+SANITIZER_PERSISTENCE_TARGET ?= $(BUILD_DIR)/persistence_tests_sanitize
+SANITIZER_FLAGS ?= -fsanitize=address,undefined -fno-omit-frame-pointer -g
 
-SRC      = $(wildcard src/*.c)
-OBJ      = $(SRC:src/%.c=build/%.o)
-TARGET   = MazeEscape.exe
+ifeq ($(OS),Windows_NT)
+TEST_TARGET := $(TEST_TARGET).exe
+PERSISTENCE_TEST_TARGET := $(PERSISTENCE_TEST_TARGET).exe
+SANITIZER_TEST_TARGET := $(SANITIZER_TEST_TARGET).exe
+SANITIZER_PERSISTENCE_TARGET := $(SANITIZER_PERSISTENCE_TARGET).exe
+MKDIR = if not exist $(BUILD_DIR) mkdir $(BUILD_DIR) & if not exist $(SAVE_DIR) mkdir $(SAVE_DIR)
+CLEAN = if exist $(BUILD_DIR) rmdir /S /Q $(BUILD_DIR) & if exist $(TARGET) del /Q $(TARGET)
+else
+MKDIR = mkdir -p $(BUILD_DIR) $(SAVE_DIR)
+CLEAN = rm -rf $(BUILD_DIR) $(TARGET)
+endif
 
-.PHONY: all clean run
+CFLAGS ?= -Wall -Wextra -std=c99 -O2
+CPPFLAGS ?= -Iinclude -I$(RAYLIB_INCLUDE)
+LDFLAGS ?= -L$(RAYLIB_LIB)
+LDLIBS ?= -lraylib
+
+ifeq ($(OS),Windows_NT)
+LDLIBS += -lopengl32 -lgdi32 -lwinmm
+endif
+ifneq ($(strip $(W64BIN)),)
+CFLAGS += -B$(W64BIN)
+LDFLAGS += -B$(W64BIN)
+endif
+
+SRC = $(wildcard src/*.c)
+OBJ = $(SRC:src/%.c=$(BUILD_DIR)/%.o)
+TEST_PROD_SRC = $(filter-out src/main.c,$(SRC))
+
+.PHONY: all clean run test test-sanitize
 
 all: build $(TARGET)
 
 build:
-	@if not exist build mkdir build
-	@if not exist saves mkdir saves
+	$(MKDIR)
 
 $(TARGET): $(OBJ)
-	$(CC) $(OBJ) -o $@ $(LDFLAGS)
+	$(CC) $(LDFLAGS) $(OBJ) -o $@ $(LDLIBS)
 	@echo === Build successful: $(TARGET) ===
 
-build/%.o: src/%.c
-	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD_DIR)/%.o: src/%.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+$(TEST_TARGET): tests/test_maze_pathfinding.c src/maze.c src/pathfinding.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -o $@
+
+$(PERSISTENCE_TEST_TARGET): tests/test_persistence.c $(TEST_PROD_SRC)
+	$(CC) $(CPPFLAGS) $(CFLAGS) tests/test_persistence.c $(TEST_PROD_SRC) -o $@ $(LDFLAGS) $(LDLIBS)
+
+test: build $(TEST_TARGET) $(PERSISTENCE_TEST_TARGET)
+	$(RUN_PREFIX)$(TEST_TARGET)
+	$(RUN_PREFIX)$(PERSISTENCE_TEST_TARGET)
+
+test-sanitize: build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(SANITIZER_FLAGS) tests/test_maze_pathfinding.c src/maze.c src/pathfinding.c -o $(SANITIZER_TEST_TARGET)
+	$(RUN_PREFIX)$(SANITIZER_TEST_TARGET)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(SANITIZER_FLAGS) tests/test_persistence.c $(TEST_PROD_SRC) -o $(SANITIZER_PERSISTENCE_TARGET) $(LDFLAGS) $(LDLIBS)
+	$(RUN_PREFIX)$(SANITIZER_PERSISTENCE_TARGET)
 
 run: all
-	./$(TARGET)
+	$(RUN_PREFIX)$(TARGET)
 
 clean:
-	@if exist build rmdir /S /Q build
-	@if exist $(TARGET) del /Q $(TARGET)
+	$(CLEAN)
 	@echo Cleaned.

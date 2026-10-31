@@ -35,7 +35,8 @@ static void getLevelCfg(int level, Difficulty d,
     *kc = level >= 4 ? 2 : 1;
     *pc = 2 + (level-1);
     if (*pc > MAX_POWERUPS) *pc = MAX_POWERUPS;
-    *ec = level;
+    int baseEnemies = d == DIFF_EASY ? 1 : d == DIFF_HARD ? 3 : 2;
+    *ec = baseEnemies + (level - 1) / 2;
     if (*ec > MAX_ENEMIES) *ec = MAX_ENEMIES;
 
     for (int i = 0; i < *ec; i++) {
@@ -54,7 +55,7 @@ void initGame(Game *g)
     memset(g, 0, sizeof(Game));
     g->state = STATE_MENU;
     g->maxMenuItems = 6;
-    g->fogEnabled = true;
+    g->fogEnabled = false;
     g->aiSelectedAlgo = -1;
     strncpy(g->playerName, "PLAYER", MAX_NAME_LENGTH-1);
     g->nameLength = (int)strlen(g->playerName);
@@ -80,6 +81,13 @@ void cleanupGame(Game *g)
     unloadAudio(&g->audio);
 }
 
+static void recordRunScore(Game *g)
+{
+    insertHighScore(g->highScores, &g->highScoreCount, MAX_HIGH_SCORES,
+                    g->playerName, g->totalScore);
+    saveHighScores(g->highScores, g->highScoreCount);
+}
+
 /* ---- New game / level management ---- */
 
 void startNewGame(Game *g, Difficulty d)
@@ -91,30 +99,48 @@ void startNewGame(Game *g, Difficulty d)
 
 void startLevel(Game *g)
 {
+    Maze *maze = NULL;
+    Enemy *enemies = NULL;
+    PowerUp *powerups = NULL;
+    bool *visible = NULL;
+    bool *explored = NULL;
+
     cleanupLevel(g);
     int mw,mh,ec,kc,pc; EnemyType et[MAX_ENEMIES]; float tm;
     getLevelCfg(g->currentLevel, g->difficulty, &mw,&mh,&ec,et,&kc,&pc,&tm);
 
     int att = 0;
+    bool placed = false;
     do {
-        if (g->maze) destroyMaze(g->maze);
-        g->maze = createMaze(mw, mh);
-        if (!g->maze) return;
-        generateMaze(g->maze);
-        placeMazeObjects(g->maze, kc);
+        if (maze) destroyMaze(maze);
+        maze = createMaze(mw, mh);
+        if (!maze) goto level_fail;
+        generateMaze(maze);
+        placed = placeMazeObjects(maze, kc);
         att++;
-    } while (!validateMaze(g->maze) && att < 100);
+    } while ((!placed || !validateMaze(maze)) && att < 100);
 
-    initPlayer(&g->player, g->maze->start.x, g->maze->start.y);
-    g->enemyCount = ec;
-    g->enemies = createEnemies(ec, g->maze, et, g->difficulty);
-    g->powerupCount = pc;
-    g->powerups = createPowerUps(pc, g->maze);
-    g->timer = tm; g->score = 0; g->keysRequired = kc;
+    if (!placed || !validateMaze(maze)) goto level_fail;
+
+    enemies = createEnemies(ec, maze, et, g->difficulty);
+    if (ec > 0 && !enemies) goto level_fail;
+    powerups = createPowerUps(pc, maze);
+    if (pc > 0 && !powerups) goto level_fail;
 
     int vs = mw * mh;
-    g->visible  = (bool *)calloc(vs, sizeof(bool));
-    g->explored = (bool *)calloc(vs, sizeof(bool));
+    visible  = (bool *)calloc(vs, sizeof(bool));
+    explored = (bool *)calloc(vs, sizeof(bool));
+    if (!visible || !explored) goto level_fail;
+
+    g->maze = maze; maze = NULL;
+    g->enemyCount = ec;
+    g->enemies = enemies; enemies = NULL;
+    g->powerupCount = pc;
+    g->powerups = powerups; powerups = NULL;
+    g->visible = visible; visible = NULL;
+    g->explored = explored; explored = NULL;
+    initPlayer(&g->player, g->maze->start.x, g->maze->start.y);
+    g->timer = tm; g->score = 0; g->keysRequired = kc;
 
     switch (g->difficulty) {
         case DIFF_EASY: g->visibilityRadius=VISIBILITY_EASY; break;
@@ -124,9 +150,20 @@ void startLevel(Game *g)
     g->camera.target   = (Vector2){ g->player.x, g->player.y };
     g->camera.offset   = (Vector2){ SCREEN_WIDTH/2.0f, SCREEN_HEIGHT/2.0f };
     g->camera.rotation = 0; g->camera.zoom = 1;
-    g->fogEnabled = true;
+    g->fogEnabled = false;
     g->state = STATE_PLAYING;
     addNotification(g, TextFormat("Level %d", g->currentLevel), COLOR_TITLE);
+    return;
+
+level_fail:
+    destroyMaze(maze);
+    destroyEnemies(enemies, ec);
+    destroyPowerUps(powerups);
+    free(visible);
+    free(explored);
+    g->state = STATE_MENU;
+    g->menuSelection = 0;
+    addNotification(g, "Unable to start level", COLOR_TITLE);
 }
 
 void nextLevel(Game *g)
@@ -134,7 +171,10 @@ void nextLevel(Game *g)
     int ls = calculateLevelScore(g->currentLevel, g->timer,
         g->player.health, g->player.keysCollected, g->player.powerupsCollected);
     g->score = ls; g->totalScore += ls;
-    if (g->currentLevel >= MAX_LEVELS) g->state = STATE_NAME_ENTRY;
+    if (g->currentLevel >= MAX_LEVELS) {
+        recordRunScore(g);
+        g->state = STATE_GAME_OVER;
+    }
     else { g->currentLevel++; g->state = STATE_LEVEL_COMPLETE; }
 }
 
@@ -225,7 +265,7 @@ void drawGameFrame(Game *g)
 
 void updateMenu(Game *g)
 {
-    g->maxMenuItems = 6;
+    g->maxMenuItems = 7;
     if (IsKeyPressed(KEY_UP))   { g->menuSelection--; if (g->menuSelection<0) g->menuSelection=g->maxMenuItems-1; playGameSound(&g->audio,g->audio.sndMenuMove); }
     if (IsKeyPressed(KEY_DOWN)) { g->menuSelection++; if (g->menuSelection>=g->maxMenuItems) g->menuSelection=0; playGameSound(&g->audio,g->audio.sndMenuMove); }
     if (IsKeyPressed(KEY_ENTER)) {
@@ -237,9 +277,10 @@ void updateMenu(Game *g)
             case 2: g->state=STATE_HIGH_SCORES;
                     g->highScoreCount=loadHighScores(g->highScores,MAX_HIGH_SCORES); break;
             case 3: g->state=STATE_INSTRUCTIONS; break;
-            case 4: g->state=STATE_AI_DEMO; g->aiResultsComputed=false;
+                case 4: g->previousState=STATE_MENU; g->state=STATE_SETTINGS; g->menuSelection=0; break;
+                case 5: g->state=STATE_AI_DEMO; g->aiResultsComputed=false;
                     g->aiSelectedAlgo=-1; g->menuSelection=0; break;
-            case 5: CloseWindow(); break;
+                case 6: CloseWindow(); break;
         }
     }
 }
@@ -249,7 +290,13 @@ void updateDifficulty(Game *g)
     g->maxMenuItems = 3;
     if (IsKeyPressed(KEY_UP))   { g->menuSelection--; if (g->menuSelection<0) g->menuSelection=2; }
     if (IsKeyPressed(KEY_DOWN)) { g->menuSelection++; if (g->menuSelection>2) g->menuSelection=0; }
-    if (IsKeyPressed(KEY_ENTER)) { playGameSound(&g->audio,g->audio.sndMenuSelect); startNewGame(g,(Difficulty)g->menuSelection); }
+    if (IsKeyPressed(KEY_ENTER)) {
+        playGameSound(&g->audio,g->audio.sndMenuSelect);
+        g->difficulty=(Difficulty)g->menuSelection;
+        g->playerName[0]='\0';
+        g->nameLength=0;
+        g->state=STATE_NAME_ENTRY;
+    }
     if (IsKeyPressed(KEY_ESCAPE)) { g->state=STATE_MENU; g->menuSelection=0; }
 }
 
@@ -318,7 +365,8 @@ void updatePlaying(Game *g, float dt)
                     g->score=calculateLevelScore(g->currentLevel,g->timer,0,g->player.keysCollected,g->player.powerupsCollected);
                     g->totalScore+=g->score;
                     playGameSound(&g->audio,g->audio.sndGameOver);
-                    g->state=STATE_NAME_ENTRY; return;
+                    recordRunScore(g);
+                    g->state=STATE_GAME_OVER; return;
                 }
             }
         }
@@ -331,7 +379,8 @@ void updatePlaying(Game *g, float dt)
         g->score=calculateLevelScore(g->currentLevel,0,g->player.health,g->player.keysCollected,g->player.powerupsCollected);
         g->totalScore+=g->score;
         playGameSound(&g->audio,g->audio.sndGameOver);
-        g->state=STATE_NAME_ENTRY; return;
+        recordRunScore(g);
+        g->state=STATE_GAME_OVER; return;
     }
 
     computeVisibility(g);
@@ -417,8 +466,8 @@ void updateNameEntry(Game *g)
     while (k>0) { if (k>=32&&k<=125&&g->nameLength<MAX_NAME_LENGTH-1) { g->playerName[g->nameLength++]=(char)k; g->playerName[g->nameLength]='\0'; } k=GetCharPressed(); }
     if (IsKeyPressed(KEY_BACKSPACE)&&g->nameLength>0) { g->nameLength--; g->playerName[g->nameLength]='\0'; }
     if (IsKeyPressed(KEY_ENTER)&&g->nameLength>0) {
-        insertHighScore(g->highScores,&g->highScoreCount,MAX_HIGH_SCORES,g->playerName,g->totalScore);
-        saveHighScores(g->highScores,g->highScoreCount);
-        g->state=STATE_GAME_OVER; g->menuSelection=0;
+        playGameSound(&g->audio,g->audio.sndMenuSelect);
+        startNewGame(g,g->difficulty);
     }
+    if (IsKeyPressed(KEY_ESCAPE)) { g->state=STATE_DIFFICULTY; g->menuSelection=(int)g->difficulty; }
 }

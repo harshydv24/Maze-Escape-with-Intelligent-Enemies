@@ -20,7 +20,7 @@ typedef struct Maze {
 Maze     *createMaze(int width, int height);
 void      destroyMaze(Maze *maze);
 void      generateMaze(Maze *maze);
-void      placeMazeObjects(Maze *maze, int keyCount);
+bool      placeMazeObjects(Maze *maze, int keyCount);
 bool      validateMaze(Maze *maze);
 GridNode  randomPathCell(Maze *maze);
 bool      isCellWalkable(Maze *maze, int x, int y);

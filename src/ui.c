@@ -35,8 +35,8 @@ void drawMenu(Game *g)
     ClearBackground(COLOR_MENU_BG);
     drawCenteredText("MAZE ESCAPE", 80, 60, COLOR_TITLE);
     drawCenteredText("with Intelligent Enemies", 150, 20, LIGHTGRAY);
-    const char *opts[] = {"New Game","Continue","High Scores","Instructions","AI Demo","Quit"};
-    for (int i=0;i<6;i++) drawOpt(opts[i], 250+i*50, 28, i==g->menuSelection);
+    const char *opts[] = {"New Game","Continue","High Scores","Instructions","Settings","AI Demo","Quit"};
+    for (int i=0;i<7;i++) drawOpt(opts[i], 250+i*45, 28, i==g->menuSelection);
     drawCenteredText("UP/DOWN: Navigate  |  ENTER: Select", SCREEN_HEIGHT-40, 16, DARKGRAY);
     drawNotifications(g);
 }
@@ -84,9 +84,13 @@ static void drawMazeGrid(Game *g)
             if (c==CELL_WALL) DrawRectangleLines((int)cx,(int)cy,CELL_SIZE,CELL_SIZE,(Color){55,58,75,255});
 
             if (c==CELL_KEY) {
-                float kx=cx+CELL_SIZE/2.0f, ky=cy+CELL_SIZE/2.0f, s=CELL_SIZE*0.3f;
-                DrawTriangle((Vector2){kx,ky-s},(Vector2){kx+s,ky},(Vector2){kx,ky+s},COLOR_KEY);
-                DrawTriangle((Vector2){kx,ky-s},(Vector2){kx,ky+s},(Vector2){kx-s,ky},COLOR_KEY);
+                int kx=(int)(cx+CELL_SIZE/2.0f), ky=(int)(cy+CELL_SIZE/2.0f);
+                /* Gold key: circular bow, shaft, and two teeth. */
+                DrawCircle(kx-5,ky,5,COLOR_KEY);
+                DrawCircle(kx-5,ky,2,COLOR_PATH);
+                DrawRectangle(kx-1,ky-2,11,4,COLOR_KEY);
+                DrawRectangle(kx+5,ky,3,4,COLOR_KEY);
+                DrawRectangle(kx+9,ky,3,3,COLOR_KEY);
             }
             if (c==CELL_EXIT) {
                 bool ul = g->player.keysCollected>=g->keysRequired;
@@ -101,13 +105,18 @@ static void drawMazeGrid(Game *g)
         }
 }
 
+static Vector2 powerupPoint(int cx, int cy, float dx, float dy, float scale)
+{
+    return (Vector2){cx + dx*scale, cy + dy*scale};
+}
+
 static void drawPUs(Game *g)
 {
     for (int i=0; i<g->powerupCount; i++) {
         if (g->powerups[i].collected) continue;
         int idx=g->powerups[i].gridY*g->maze->width+g->powerups[i].gridX;
         if (g->fogEnabled && !g->visible[idx]) continue;
-        float cx=g->powerups[i].x, cy=g->powerups[i].y;
+        int cx=(int)g->powerups[i].x, cy=(int)g->powerups[i].y;
         Color c;
         switch(g->powerups[i].type){
             case POWERUP_SPEED:c=COLOR_POWERUP_SPEED;break;
@@ -115,8 +124,45 @@ static void drawPUs(Game *g)
             case POWERUP_FREEZE:c=COLOR_POWERUP_FREEZE;break;
             default:c=COLOR_POWERUP_HEALTH;break;
         }
-        float p=(sinf((float)GetTime()*3)+1)/2, r=CELL_SIZE*0.25f*(0.8f+p*0.4f);
-        DrawCircle((int)cx,(int)cy,(int)r,c);
+        float scale=1.4f+0.15f*sinf((float)GetTime()*7.0f+i*0.6f);
+        /* Flat silhouettes pulse gently while staying clear of adjacent cells. */
+        switch(g->powerups[i].type) {
+            case POWERUP_SPEED:
+                DrawTriangle(powerupPoint(cx,cy,0,-8,scale),powerupPoint(cx,cy,7,-1,scale),powerupPoint(cx,cy,2,-1,scale),c);
+                DrawTriangle(powerupPoint(cx,cy,0,-8,scale),powerupPoint(cx,cy,2,-1,scale),powerupPoint(cx,cy,4,0,scale),c);
+                DrawTriangle(powerupPoint(cx,cy,0,-8,scale),powerupPoint(cx,cy,4,0,scale),powerupPoint(cx,cy,-4,8,scale),c);
+                DrawTriangle(powerupPoint(cx,cy,0,-8,scale),powerupPoint(cx,cy,-4,8,scale),powerupPoint(cx,cy,-2,1,scale),c);
+                DrawTriangle(powerupPoint(cx,cy,0,-8,scale),powerupPoint(cx,cy,-2,1,scale),powerupPoint(cx,cy,-7,1,scale),c);
+                break;
+            case POWERUP_INVISIBILITY:
+                DrawTriangle(powerupPoint(cx,cy,-7,0,scale),powerupPoint(cx,cy,0,-5,scale),powerupPoint(cx,cy,7,0,scale),c);
+                DrawTriangle(powerupPoint(cx,cy,-7,0,scale),powerupPoint(cx,cy,0,5,scale),powerupPoint(cx,cy,7,0,scale),c);
+                DrawCircleV((Vector2){(float)cx,(float)cy},2*scale,COLOR_PATH);
+                break;
+            case POWERUP_FREEZE:
+                DrawLineEx(powerupPoint(cx,cy,-6,0,scale),powerupPoint(cx,cy,6,0,scale),2.2f*scale,c);
+                DrawLineEx(powerupPoint(cx,cy,-3,-5,scale),powerupPoint(cx,cy,3,5,scale),2.2f*scale,c);
+                DrawLineEx(powerupPoint(cx,cy,-3,5,scale),powerupPoint(cx,cy,3,-5,scale),2.2f*scale,c);
+                DrawLineEx(powerupPoint(cx,cy,6,0,scale),powerupPoint(cx,cy,4,-2,scale),1.7f*scale,c);
+                DrawLineEx(powerupPoint(cx,cy,6,0,scale),powerupPoint(cx,cy,4,2,scale),1.7f*scale,c);
+                DrawLineEx(powerupPoint(cx,cy,-6,0,scale),powerupPoint(cx,cy,-4,-2,scale),1.7f*scale,c);
+                DrawLineEx(powerupPoint(cx,cy,-6,0,scale),powerupPoint(cx,cy,-4,2,scale),1.7f*scale,c);
+                DrawLineEx(powerupPoint(cx,cy,3,5,scale),powerupPoint(cx,cy,1,2,scale),1.7f*scale,c);
+                DrawLineEx(powerupPoint(cx,cy,3,5,scale),powerupPoint(cx,cy,4,2,scale),1.7f*scale,c);
+                DrawLineEx(powerupPoint(cx,cy,-3,-5,scale),powerupPoint(cx,cy,-1,-2,scale),1.7f*scale,c);
+                DrawLineEx(powerupPoint(cx,cy,-3,-5,scale),powerupPoint(cx,cy,-4,-2,scale),1.7f*scale,c);
+                DrawLineEx(powerupPoint(cx,cy,-3,5,scale),powerupPoint(cx,cy,-1,2,scale),1.7f*scale,c);
+                DrawLineEx(powerupPoint(cx,cy,-3,5,scale),powerupPoint(cx,cy,-4,2,scale),1.7f*scale,c);
+                DrawLineEx(powerupPoint(cx,cy,3,-5,scale),powerupPoint(cx,cy,1,-2,scale),1.7f*scale,c);
+                DrawLineEx(powerupPoint(cx,cy,3,-5,scale),powerupPoint(cx,cy,4,-2,scale),1.7f*scale,c);
+                break;
+            case POWERUP_HEALTH:
+                DrawRectangle((int)(cx-2*scale),(int)(cy-6*scale),(int)(4*scale),(int)(12*scale),c);
+                DrawRectangle((int)(cx-6*scale),(int)(cy-2*scale),(int)(12*scale),(int)(4*scale),c);
+                break;
+            default:
+                break;
+        }
     }
 }
 
@@ -144,8 +190,7 @@ static void drawPlayerEnt(Game *g)
     if (p->invincibilityTimer>0 && sinf(p->invincibilityTimer*20)>0) pc.a=120;
     if (p->invisibilityTimer>0) pc.a=80;
     DrawCircle((int)p->x,(int)p->y,(int)(PLAYER_SIZE/2),pc);
-    float tx=p->x+p->dirX*PLAYER_SIZE*0.6f, ty=p->y+p->dirY*PLAYER_SIZE*0.6f;
-    DrawCircle((int)tx,(int)ty,3,WHITE);
+    DrawCircleLines((int)p->x,(int)p->y,(int)(PLAYER_SIZE*0.28f),BLACK);
     if (p->isSprinting) DrawCircleLines((int)p->x,(int)p->y,(int)(PLAYER_SIZE/2+3),YELLOW);
 }
 
@@ -302,8 +347,7 @@ void drawInstructions(Game *g)
     DrawText("OBJECTIVE:",x,y,fs+2,COLOR_KEY); y+=30;
     DrawText("Find the key(s), reach the exit, escape!",x,y,fs,c); y+=40;
     DrawText("CONTROLS:",x,y,fs+2,COLOR_KEY); y+=28;
-    DrawText("W/A/S/D or Arrows  -  Move",x,y,fs,c); y+=24;
-    DrawText("Left Shift         -  Sprint",x,y,fs,c); y+=24;
+    DrawText("W/A/S/D or Arrows  -  Move smoothly",x,y,fs,c); y+=24;
     DrawText("ESC                -  Pause",x,y,fs,c); y+=24;
     DrawText("F1                 -  Debug Mode",x,y,fs,c); y+=24;
     DrawText("F2                 -  Toggle Fog",x,y,fs,c); y+=36;
@@ -411,7 +455,9 @@ void drawNameEntry(Game *g)
 {
     ClearBackground(COLOR_MENU_BG);
     drawCenteredText("ENTER YOUR NAME",150,40,COLOR_TITLE);
-    drawCenteredText(TextFormat("Score: %d",g->totalScore),220,28,COLOR_KEY);
+    const char *difficulty = g->difficulty==DIFF_EASY ? "Easy" :
+        g->difficulty==DIFF_HARD ? "Hard" : "Normal";
+    drawCenteredText(TextFormat("Difficulty: %s",difficulty),220,24,LIGHTGRAY);
 
     int bw=400,bh=50,bx=(SCREEN_WIDTH-bw)/2,by=300;
     DrawRectangle(bx,by,bw,bh,(Color){40,42,54,255});
@@ -424,5 +470,5 @@ void drawNameEntry(Game *g)
         DrawRectangle(bx+15+cw+2,by+10,2,30,COLOR_MENU_HIGHLIGHT);
     }
 
-    drawCenteredText("Press ENTER to submit",400,18,DARKGRAY);
+    drawCenteredText("ENTER: Start Game  |  ESC: Back",400,18,DARKGRAY);
 }

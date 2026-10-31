@@ -148,7 +148,8 @@ Options:
 3. High Scores
 4. Instructions
 5. Settings
-6. Quit
+6. AI Demo
+7. Quit
 
 Use raylib for menu rendering.
 
@@ -171,16 +172,16 @@ Provide three difficulty levels:
 ## Easy
 
 - Small maze
-- 1 enemy
+- 1 enemy on the first level, increasing on later levels
 - Slower enemies
 - Longer timer
 - Larger player vision
-- Less aggressive AI
+- Smaller enemy detection range
 
 ## Normal
 
 - Medium maze
-- 2 enemies
+- 2 enemies on the first level, increasing on later levels
 - Medium enemy speed
 - Normal timer
 - Normal vision
@@ -188,11 +189,11 @@ Provide three difficulty levels:
 ## Hard
 
 - Large maze
-- 3–4 enemies
+- 3 enemies on the first level, increasing to a maximum of 4
 - Faster enemies
 - Shorter timer
 - Smaller player vision
-- More intelligent enemy behavior
+- Larger enemy detection range
 
 Difficulty should affect actual gameplay rather than just changing cosmetic values.
 
@@ -307,8 +308,6 @@ Example concept:
         int maxHealth;
         int keysCollected;
         float speed;
-        float sprintSpeed;
-        float stamina;
     } Player;
 
 You may modify the structure if a better design is appropriate.
@@ -319,10 +318,10 @@ Player controls:
 - A / LEFT → Move left
 - S / DOWN → Move down
 - D / RIGHT → Move right
-- SHIFT → Sprint
 - ESC → Pause
 
-Movement should feel smooth rather than teleporting between cells.
+Each accepted movement input should move the player exactly one grid cell.
+The player should snap to the center of the destination cell.
 
 The player should not be able to move through walls.
 
@@ -513,25 +512,27 @@ The player should be able to hide behind walls.
 
 # 18. Enemy Difficulty
 
-Enemy intelligence should increase with difficulty.
+Enemy pressure increases with difficulty through movement speed, detection
+range, timer length, and player vision. Enemy types and pathfinding algorithms
+are determined by level progression rather than difficulty alone.
 
 Easy:
 
 - Lower detection range
 - Lower speed
-- Longer reaction time
+- Smaller detection range
 
 Normal:
 
 - Medium detection range
 - Medium speed
-- Faster reaction
+- Medium detection range
 
 Hard:
 
 - Large detection range
 - Higher speed
-- More frequent path recalculation
+- Larger detection range
 - More aggressive pursuit
 
 ---
@@ -741,21 +742,25 @@ Use:
     fwrite()
     fclose()
 
-Save:
+The current implementation saves:
 
 - Current level
-- Player position
-- Player health
-- Score
-- Timer
-- Keys collected
-- Enemy positions
-- Maze state
-- Difficulty
+- Difficulty, score, and timer
+- Player position, grid position, health, stamina, and keys collected
+- Maze cells, start/exit positions, and key positions
+- Enemy positions, grid positions, types, and AI states
+- Power-up positions, types, and collection state
+- Explored fog-of-war cells
 
-Use a binary save file such as:
+Transient power-up timers, enemy paths and patrol progress, camera state, and
+debug/settings state are not persisted.
 
-    save.dat
+Use the binary save file:
+
+    saves/save.dat
+
+The current format uses native C structs and is intended for the same compiler
+and platform configuration. It is not a portable interchange format.
 
 Do not rely on external databases.
 

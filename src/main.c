@@ -15,6 +15,7 @@ int main(void)
     srand((unsigned int)time(NULL));
 
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Maze Escape with Intelligent Enemies");
+    SetExitKey(KEY_NULL);
     SetTargetFPS(TARGET_FPS);
     InitAudioDevice();
 

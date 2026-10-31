@@ -25,7 +25,7 @@ bool checkWallCollision(Maze *maze, float x, float y, float hs)
 bool checkPlayerEnemyCollision(Player *p, Enemy *e)
 {
     float dx=p->x-e->x, dy=p->y-e->y;
-    return sqrtf(dx*dx+dy*dy) < (PLAYER_SIZE+ENEMY_SIZE)/2.0f;
+    return sqrtf(dx*dx+dy*dy) < (PLAYER_COLLISION_SIZE+ENEMY_SIZE)/2.0f;
 }
 
 bool checkPlayerCellOverlap(Player *p, int cx, int cy)

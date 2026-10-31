@@ -13,9 +13,10 @@ typedef struct Player {
     int   health, maxHealth;
     int   keysCollected;
     float speed, sprintSpeed;
+    float moveTimer;
     float stamina, maxStamina;
     float invincibilityTimer;
-    bool  isSprinting;
+    bool  isSprinting, isMoving;
     float dirX, dirY;     /* facing direction */
     /* Power-up timers */
     float speedBoostTimer;

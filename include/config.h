@@ -25,9 +25,10 @@
 #define MAZE_SIZE_HARD      41
 
 /* ---- Player ---- */
-#define PLAYER_SIZE             (CELL_SIZE * 0.6f)
-#define PLAYER_SPEED            150.0f
-#define PLAYER_SPRINT_SPEED     250.0f
+#define PLAYER_SIZE             (CELL_SIZE * 0.85f)
+#define PLAYER_COLLISION_SIZE   (CELL_SIZE * 0.85f)
+#define PLAYER_SPEED            500.0f
+#define PLAYER_SPRINT_SPEED     850.0f
 #define PLAYER_MAX_HEALTH       100
 #define PLAYER_MAX_STAMINA      100.0f
 #define PLAYER_STAMINA_DRAIN    30.0f
@@ -35,7 +36,7 @@
 #define PLAYER_INVINCIBILITY    1.5f
 
 /* ---- Enemy ---- */
-#define ENEMY_SIZE              (CELL_SIZE * 0.6f)
+#define ENEMY_SIZE              (CELL_SIZE * 0.85f)
 #define ENEMY_DAMAGE            20
 #define MAX_ENEMIES             4
 #define MAX_PATROL_POINTS       8
