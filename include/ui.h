@@ -5,6 +5,8 @@
 
 struct Game;
 
+void initUI(void);
+void cleanupUI(void);
 void drawMenu(struct Game *g);
 void drawDifficulty(struct Game *g);
 void drawPlaying(struct Game *g);

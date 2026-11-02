@@ -14,10 +14,12 @@ int main(void)
 {
     srand((unsigned int)time(NULL));
 
+    SetConfigFlags(FLAG_FULLSCREEN_MODE);
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Maze Escape with Intelligent Enemies");
     SetExitKey(KEY_NULL);
     SetTargetFPS(TARGET_FPS);
     InitAudioDevice();
+    initUI();
 
     Game game = {0};
     initGame(&game);
@@ -33,6 +35,7 @@ int main(void)
     }
 
     cleanupGame(&game);
+    cleanupUI();
     CloseAudioDevice();
     CloseWindow();
     return 0;

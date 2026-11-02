@@ -12,8 +12,10 @@
 #include <stdbool.h>
 
 /* ---- Screen ---- */
-#define SCREEN_WIDTH    1280
-#define SCREEN_HEIGHT   720
+#define SCREEN_WIDTH    1920
+#define SCREEN_HEIGHT   1080
+#define UI_LAYOUT_WIDTH 1920
+#define UI_LAYOUT_HEIGHT 1080
 #define TARGET_FPS      60
 
 /* ---- Cell / Grid ---- */
@@ -27,8 +29,11 @@
 /* ---- Player ---- */
 #define PLAYER_SIZE             (CELL_SIZE * 0.85f)
 #define PLAYER_COLLISION_SIZE   (CELL_SIZE * 0.85f)
-#define PLAYER_SPEED            500.0f
-#define PLAYER_SPRINT_SPEED     850.0f
+#define PLAYER_SPEED            2000.0f
+#define PLAYER_SPRINT_SPEED     3200.0f
+#define PLAYER_ACCELERATION     9000.0f
+#define PLAYER_DECELERATION     10000.0f
+#define PLAYER_ACCEL_START_FACTOR 0.20f
 #define PLAYER_MAX_HEALTH       100
 #define PLAYER_MAX_STAMINA      100.0f
 #define PLAYER_STAMINA_DRAIN    30.0f
@@ -77,6 +82,10 @@
 #define POWERUP_INVIS_DURATION  4.0f
 #define POWERUP_FREEZE_DURATION 3.0f
 #define POWERUP_HEALTH_AMOUNT   30
+#define PLAYER_START_DECOYS     2
+#define DECOY_LURE_DURATION     4.0f
+#define DECOY_VISIBLE_DURATION  2.5f
+#define BONUS_CACHE_SCORE       500
 
 /* ---- Levels ---- */
 #define MAX_LEVELS              5
@@ -88,12 +97,13 @@
 /* ---- Notifications ---- */
 #define MAX_NOTIFICATIONS       5
 #define NOTIFICATION_DURATION   2.0f
+#define NOTIFICATION_FADE_DURATION 0.35f
 
 /* ---- Save Files ---- */
 #define SAVE_FILE_PATH          "saves/save.dat"
 #define HIGHSCORE_FILE_PATH     "saves/highscores.dat"
 #define SAVE_MAGIC              0x4D415A45
-#define SAVE_VERSION            1
+#define SAVE_VERSION            2
 
 /* ---- Colours (Dracula-inspired palette) ---- */
 #define COLOR_BG                (Color){30, 31, 38, 255}

@@ -10,12 +10,20 @@ void initAudio(GameAudio *a)
     a->soundVolume = 0.7f; a->musicVolume = 0.5f;
     a->soundsLoaded = a->musicLoaded = false;
 
+    if (FileExists("assets/sounds/footstep.wav"))
+        { a->sndFootstep = LoadSound("assets/sounds/footstep.wav"); a->soundsLoaded = true; }
     if (FileExists("assets/sounds/key.wav"))
         { a->sndPickupKey = LoadSound("assets/sounds/key.wav"); a->soundsLoaded = true; }
     if (FileExists("assets/sounds/powerup.wav"))
         a->sndPickupPowerup = LoadSound("assets/sounds/powerup.wav");
     if (FileExists("assets/sounds/damage.wav"))
         a->sndDamage = LoadSound("assets/sounds/damage.wav");
+    if (FileExists("assets/sounds/enemy_detect.wav"))
+        a->sndEnemyDetect = LoadSound("assets/sounds/enemy_detect.wav");
+    if (FileExists("assets/sounds/exit_unlock.wav"))
+        a->sndExitUnlock = LoadSound("assets/sounds/exit_unlock.wav");
+    if (FileExists("assets/sounds/decoy.wav"))
+        a->sndDecoy = LoadSound("assets/sounds/decoy.wav");
     if (FileExists("assets/sounds/levelcomplete.wav"))
         a->sndLevelComplete = LoadSound("assets/sounds/levelcomplete.wav");
     if (FileExists("assets/sounds/gameover.wav"))
@@ -35,7 +43,11 @@ void initAudio(GameAudio *a)
 void unloadAudio(GameAudio *a)
 {
     if (a->sndPickupKey.frameCount)     UnloadSound(a->sndPickupKey);
+    if (a->sndFootstep.frameCount)       UnloadSound(a->sndFootstep);
     if (a->sndPickupPowerup.frameCount) UnloadSound(a->sndPickupPowerup);
+    if (a->sndEnemyDetect.frameCount)    UnloadSound(a->sndEnemyDetect);
+    if (a->sndExitUnlock.frameCount)     UnloadSound(a->sndExitUnlock);
+    if (a->sndDecoy.frameCount)          UnloadSound(a->sndDecoy);
     if (a->sndDamage.frameCount)        UnloadSound(a->sndDamage);
     if (a->sndLevelComplete.frameCount) UnloadSound(a->sndLevelComplete);
     if (a->sndGameOver.frameCount)      UnloadSound(a->sndGameOver);

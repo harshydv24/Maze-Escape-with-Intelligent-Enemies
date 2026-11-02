@@ -56,7 +56,7 @@ void updateEnemyState(Enemy *e, Player *p, Maze *m)
         } break;
     case AI_INVESTIGATE:
         if (detected) { e->state=AI_CHASE; e->lastKnownX=p->x; e->lastKnownY=p->y; e->playerDetected=true; }
-        else if (!e->path || e->pathIndex>=e->pathLength) e->state=AI_RETURN_TO_PATROL;
+        else if (e->path && e->pathIndex>=e->pathLength) e->state=AI_RETURN_TO_PATROL;
         break;
     case AI_CHASE:
         if (detected) { e->lastKnownX=p->x; e->lastKnownY=p->y; }
@@ -79,6 +79,13 @@ static void doAI(Enemy *e, Player *p, Maze *m, float dt,
                  PathResult (*findPath)(Maze*,GridNode,GridNode))
 {
     updateEnemyState(e, p, m);
+    if (e->state == AI_INVESTIGATE) {
+        e->searchTimer -= dt;
+        if (e->searchTimer <= 0) {
+            e->state = AI_RETURN_TO_PATROL;
+            free(e->path); e->path=NULL; e->pathLength=e->pathIndex=0;
+        }
+    }
     if (p->freezeTimer > 0) return;
     e->pathTimer += dt;
 
@@ -110,6 +117,12 @@ static void doAI(Enemy *e, Player *p, Maze *m, float dt,
         moveEnemyAlongPath(e, dt);
         break;
     case AI_INVESTIGATE:
+        if (!e->path || e->pathIndex>=e->pathLength) {
+            int lx=(int)(e->lastKnownX/CELL_SIZE), ly=(int)(e->lastKnownY/CELL_SIZE);
+            setEnemyPath(e, findPath(m, start, (GridNode){lx,ly}));
+        }
+        moveEnemyAlongPath(e, dt);
+        break;
     case AI_RETURN_TO_PATROL:
         if (!e->path || e->pathIndex>=e->pathLength) {
             if (e->patrolPointCount > 0)

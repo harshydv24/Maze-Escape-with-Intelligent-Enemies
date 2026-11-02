@@ -8,7 +8,6 @@
 #include "player.h"
 #include "maze.h"
 #include "collision.h"
-#include <math.h>
 
 void initPlayer(Player *p, int gx, int gy)
 {
@@ -18,6 +17,7 @@ void initPlayer(Player *p, int gx, int gy)
     p->health = PLAYER_MAX_HEALTH;  p->maxHealth = PLAYER_MAX_HEALTH;
     p->keysCollected = 0;
     p->speed = PLAYER_SPEED;  p->sprintSpeed = PLAYER_SPRINT_SPEED;
+    p->currentMoveSpeed = 0;
     p->moveTimer = 0;
     p->stamina = PLAYER_MAX_STAMINA;  p->maxStamina = PLAYER_MAX_STAMINA;
     p->invincibilityTimer = 0;  p->isSprinting = false; p->isMoving = false;
@@ -48,14 +48,35 @@ static bool isJunctionAhead(Maze *maze, int gx, int gy, float dirX, float dirY)
 
 void updatePlayer(Player *p, Maze *maze, float dt)
 {
+    float requestedDirX=0, requestedDirY=0;
     if (IsKeyPressed(KEY_W) || IsKeyPressed(KEY_UP)) {
-        p->dirX = 0; p->dirY = -1; p->isMoving = true;
+        requestedDirY = -1;
     } else if (IsKeyPressed(KEY_S) || IsKeyPressed(KEY_DOWN)) {
-        p->dirX = 0; p->dirY = 1; p->isMoving = true;
+        requestedDirY = 1;
     } else if (IsKeyPressed(KEY_A) || IsKeyPressed(KEY_LEFT)) {
-        p->dirX = -1; p->dirY = 0; p->isMoving = true;
+        requestedDirX = -1;
     } else if (IsKeyPressed(KEY_D) || IsKeyPressed(KEY_RIGHT)) {
-        p->dirX = 1; p->dirY = 0; p->isMoving = true;
+        requestedDirX = 1;
+    }
+
+    if (requestedDirX != 0 || requestedDirY != 0) {
+        if (!p->isMoving) {
+            p->dirX = requestedDirX; p->dirY = requestedDirY;
+            p->isMoving = true;
+        } else {
+            /* Turn immediately only if the player has clear space in that direction. */
+            float probeDistance=p->currentMoveSpeed*dt;
+            if (probeDistance<1.0f) probeDistance=1.0f;
+            float halfSize=PLAYER_COLLISION_SIZE/2.0f;
+            float probeX=p->x+requestedDirX*probeDistance;
+            float probeY=p->y+requestedDirY*probeDistance;
+            if (isCellWalkable(maze,p->gridX+(int)requestedDirX,
+                                    p->gridY+(int)requestedDirY) &&
+                !checkWallCollision(maze,probeX,probeY,halfSize)) {
+                p->dirX=requestedDirX;
+                p->dirY=requestedDirY;
+            }
+        }
     }
 
     p->isSprinting = false;
@@ -72,22 +93,41 @@ void updatePlayer(Player *p, Maze *maze, float dt)
         if (p->stamina > p->maxStamina) p->stamina = p->maxStamina;
     }
 
+    /* Ease into movement instead of instantly applying full walking speed. */
+    float targetSpeed = p->isMoving ? moveSpeed : 0.0f;
+    if (p->currentMoveSpeed < targetSpeed) {
+        float speedRatio=p->currentMoveSpeed/targetSpeed;
+        if (speedRatio<0.0f) speedRatio=0.0f;
+        if (speedRatio>1.0f) speedRatio=1.0f;
+        /* Acceleration grows with speed: a softer launch and a faster finish. */
+        float easeFactor=PLAYER_ACCEL_START_FACTOR+
+                         (1.0f-PLAYER_ACCEL_START_FACTOR)*speedRatio;
+        p->currentMoveSpeed += PLAYER_ACCELERATION*easeFactor*dt;
+        if (p->currentMoveSpeed > targetSpeed) p->currentMoveSpeed = targetSpeed;
+    } else if (p->currentMoveSpeed > targetSpeed) {
+        p->currentMoveSpeed -= PLAYER_DECELERATION*dt;
+        if (p->currentMoveSpeed < targetSpeed) p->currentMoveSpeed = targetSpeed;
+    }
+
     if (p->isMoving && maze) {
-        /* Keep traveling in the last pressed direction until a wall blocks us. */
-        float distance = moveSpeed * dt;
+        /* Substeps prevent a slow frame from skipping over the final open cell. */
+        float remaining = p->currentMoveSpeed * dt;
         float halfSize = PLAYER_COLLISION_SIZE / 2.0f;
-        int oldGridX = p->gridX, oldGridY = p->gridY;
-        float nextX = p->x + p->dirX * distance;
-        float nextY = p->y + p->dirY * distance;
-        if (checkWallCollision(maze, nextX, nextY, halfSize)) {
-            p->isMoving = false;
-            /* Land at the center of the last open cell for a crisp stop. */
-            float halfCell = CELL_SIZE / 2.0f;
-            if (p->dirX != 0.0f)
-                p->x = roundf((p->x - halfCell) / CELL_SIZE) * CELL_SIZE + halfCell;
-            if (p->dirY != 0.0f)
-                p->y = roundf((p->y - halfCell) / CELL_SIZE) * CELL_SIZE + halfCell;
-        } else {
+        while (remaining > 0.0f && p->isMoving) {
+            float step = remaining > 4.0f ? 4.0f : remaining;
+            int oldGridX = p->gridX, oldGridY = p->gridY;
+            float nextX = p->x + p->dirX * step;
+            float nextY = p->y + p->dirY * step;
+
+            if (checkWallCollision(maze, nextX, nextY, halfSize)) {
+                p->isMoving = false;
+                p->currentMoveSpeed = 0;
+                /* Stop at the center of the last cell that was actually reached. */
+                p->x = p->gridX * CELL_SIZE + CELL_SIZE / 2.0f;
+                p->y = p->gridY * CELL_SIZE + CELL_SIZE / 2.0f;
+                break;
+            }
+
             p->x = nextX;
             p->y = nextY;
             updatePlayerGridPos(p);
@@ -97,7 +137,10 @@ void updatePlayer(Player *p, Maze *maze, float dt)
                 p->x = p->gridX * CELL_SIZE + CELL_SIZE / 2.0f;
                 p->y = p->gridY * CELL_SIZE + CELL_SIZE / 2.0f;
                 p->isMoving = false;
+                p->currentMoveSpeed = 0;
+                break;
             }
+            remaining -= step;
         }
         updatePlayerGridPos(p);
     }

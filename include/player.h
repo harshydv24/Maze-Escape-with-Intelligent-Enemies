@@ -12,7 +12,7 @@ typedef struct Player {
     int   gridX, gridY;
     int   health, maxHealth;
     int   keysCollected;
-    float speed, sprintSpeed;
+    float speed, sprintSpeed, currentMoveSpeed;
     float moveTimer;
     float stamina, maxStamina;
     float invincibilityTimer;

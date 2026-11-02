@@ -19,6 +19,8 @@ typedef struct {
     int keysRequired, keysCollected;
     float px, py; int pgx, pgy, pHealth; float pStamina;
     int mw, mh, eCount, puCount;
+    int decoys, bonusX, bonusY;
+    int bonusAvailable;
 } SaveHdr;
 
 typedef struct { float x,y; int gx,gy,type,state; } SaveEnemy;
@@ -63,7 +65,10 @@ static bool validHeader(const SaveHdr *header)
         return false;
 
     cellCount = header->mw * header->mh;
-    return header->keysRequired >= 0 && header->keysRequired <= cellCount &&
+    return header->decoys >= 0 && header->decoys <= PLAYER_START_DECOYS &&
+           (header->bonusAvailable == 0 || header->bonusAvailable == 1) &&
+           (!header->bonusAvailable || validGridNode((GridNode){header->bonusX,header->bonusY},header->mw,header->mh)) &&
+           header->keysRequired >= 0 && header->keysRequired <= cellCount &&
            header->keysCollected >= 0 &&
            header->keysCollected <= header->keysRequired &&
            validGridNode((GridNode){header->pgx, header->pgy},
@@ -120,6 +125,9 @@ bool saveGame(const Game *g)
     h.pHealth=g->player.health; h.pStamina=g->player.stamina;
     h.mw=g->maze->width; h.mh=g->maze->height;
     h.eCount=g->enemyCount; h.puCount=g->powerupCount;
+    h.decoys=g->decoysAvailable;
+    h.bonusX=g->bonusPosition.x; h.bonusY=g->bonusPosition.y;
+    h.bonusAvailable=g->bonusAvailable;
     if (!writeBlock(f, &h, sizeof(h), 1)) goto write_fail;
 
     for (int y = 0; y < g->maze->height; y++)
@@ -177,6 +185,9 @@ bool loadGame(Game *g)
     g->difficulty = (Difficulty)h.difficulty;
     g->score = h.score; g->totalScore = h.totalScore;
     g->timer = h.timer; g->keysRequired = h.keysRequired;
+    g->decoysAvailable=h.decoys;
+    g->bonusPosition=(GridNode){h.bonusX,h.bonusY};
+    g->bonusAvailable=h.bonusAvailable;
 
     g->maze = createMaze(h.mw, h.mh);
     if (!g->maze) goto load_fail;
@@ -253,9 +264,7 @@ bool loadGame(Game *g)
         case DIFF_HARD: g->visibilityRadius=VISIBILITY_HARD; break;
         default:        g->visibilityRadius=VISIBILITY_NORMAL; break;
     }
-    g->camera.target = (Vector2){ g->player.x, g->player.y };
-    g->camera.offset = (Vector2){ SCREEN_WIDTH/2.0f, SCREEN_HEIGHT/2.0f };
-    g->camera.rotation = 0; g->camera.zoom = 1;
+    configureMazeCamera(g);
     g->fogEnabled = false;
     g->state = STATE_PLAYING;
 

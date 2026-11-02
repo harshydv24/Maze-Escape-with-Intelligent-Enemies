@@ -4,7 +4,8 @@
 #include "config.h"
 
 typedef struct {
-    Sound sndPickupKey, sndPickupPowerup, sndDamage;
+    Sound sndFootstep, sndPickupKey, sndPickupPowerup, sndEnemyDetect;
+    Sound sndDamage, sndExitUnlock, sndDecoy;
     Sound sndLevelComplete, sndGameOver;
     Sound sndMenuSelect, sndMenuMove;
     Music bgMusic;

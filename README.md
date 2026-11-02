@@ -12,6 +12,7 @@ level timer expires.
 - Patrol, BFS Hunter, and A* Hunter enemies
 - Enemy state machine with patrol, chase, search, and return behavior
 - Fog of war, power-ups, and health
+- Full-screen display requested at 1920 x 1080, with a centered camera that fits the entire maze
 - Save/load and persistent high scores
 - AI comparison demo for Random, Greedy, DFS, BFS, and A*
 - Debug overlay for enemy paths and AI state
@@ -21,15 +22,33 @@ level timer expires.
 | Key | Action |
 | --- | --- |
 | W/A/S/D or arrow keys | Move |
-| W/A/S/D or arrow keys | Move one cell |
+| Left Shift | Sprint while moving (uses stamina) |
+| Q | Throw a decoy (two per level) |
 | Escape | Pause or go back |
 | F1 | Toggle debug overlay |
 | F2 | Toggle fog of war |
 | Enter | Select or confirm |
 
+While moving, a newly pressed direction takes effect immediately when the
+player can safely move that way. Blocked directions are ignored; the player
+continues until reaching a wall or junction.
+
 The main menu contains New Game, Continue, High Scores, Instructions, Settings,
 AI Demo, and Quit. Settings control sound volume, music volume, FPS display,
 and fog of war. Settings are available from both the main menu and pause menu.
+
+Explore dead ends for an optional glowing secret cache worth 500 points. Enemy
+spotted cues, movement and pickup sounds, damage flashes, light camera shake,
+and animated pickup feedback make important events easier to read. Audio files
+are optional; see [assets/sounds/README.md](assets/sounds/README.md) for exact
+filenames and locations.
+
+Player, enemy, key, and power-up icons can use separate transparent PNG files.
+Place them in `assets/images/`; see [assets/images/README.md](assets/images/README.md)
+for the exact filenames. Missing images use the built-in shape icons.
+UI text can use a TrueType font at `assets/fonts/game.ttf`; see
+[assets/fonts/README.md](assets/fonts/README.md). If it is absent, raylib's
+built-in font is used.
 
 ## Difficulty
 
@@ -54,7 +73,8 @@ The save file currently stores the level, difficulty, score, timer, key counts,
 player position and health, maze cells, key positions, enemy positions/types/
 states, power-up positions/types/collection state, and explored cells. It does
 not store transient power-up timers, enemy paths, patrol progress, camera state,
-or debug/settings state.
+or debug/settings state. It stores remaining decoys and whether the secret cache
+has been collected. The save format version was updated for these new fields.
 
 Malformed or truncated save and high-score files are rejected safely.
 

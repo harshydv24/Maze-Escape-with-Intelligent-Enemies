@@ -36,6 +36,7 @@ struct Enemy {
     AIUpdateFunc updateAI;
     float        lastKnownX, lastKnownY;
     bool         playerDetected;
+    float        alertTimer;
     float        searchTimer;
     /* Debug */
     int          nodesExplored;

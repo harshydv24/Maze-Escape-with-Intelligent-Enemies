@@ -13,6 +13,7 @@
 #include "powerup.h"
 #include "score.h"
 #include "audio.h"
+#include "visuals.h"
 
 typedef struct Game {
     GameState  state, previousState;
@@ -31,6 +32,19 @@ typedef struct Game {
     bool      *explored;
     int        visibilityRadius;
     Camera2D   camera;
+    float      worldTime;
+    float      cameraShakeTimer, cameraShakeIntensity;
+    float      screenFlashTimer;
+    Color      screenFlashColor;
+    Vector2    pickupEffectPosition;
+    Color      pickupEffectColor;
+    float      pickupEffectTimer;
+    float      footstepTimer;
+    int        decoysAvailable;
+    GridNode   decoyPosition;
+    float      decoyVisibleTimer;
+    GridNode   bonusPosition;
+    bool       bonusAvailable;
     bool       debugMode, fogEnabled, showFPS;
     int        menuSelection, maxMenuItems;
     Notification notifications[MAX_NOTIFICATIONS];
@@ -40,6 +54,7 @@ typedef struct Game {
     char       playerName[MAX_NAME_LENGTH];
     int        nameLength;
     GameAudio  audio;
+    GameTextures textures;
     /* AI demo */
     Maze      *demoMaze;
     GridNode   demoStart, demoEnd;
@@ -70,6 +85,7 @@ void startLevel(Game *g);
 void nextLevel(Game *g);
 void cleanupLevel(Game *g);
 void computeVisibility(Game *g);
+void configureMazeCamera(Game *g);
 void addNotification(Game *g, const char *text, Color color);
 void updateNotifications(Game *g, float dt);
 

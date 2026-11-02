@@ -48,6 +48,48 @@ static void getLevelCfg(int level, Difficulty d,
     }
 }
 
+/* Put an optional score cache at a distant dead end to reward exploration. */
+static GridNode findBonusDeadEnd(Game *g)
+{
+    GridNode best = {-1, -1};
+    int bestDistance = 7;
+    Maze *m = g->maze;
+    for (int y = 1; y < m->height - 1; y++) for (int x = 1; x < m->width - 1; x++) {
+        if (m->grid[y][x] != CELL_PATH) continue;
+        int degree = isCellWalkable(m,x-1,y) + isCellWalkable(m,x+1,y) +
+                     isCellWalkable(m,x,y-1) + isCellWalkable(m,x,y+1);
+        int distance = abs(x-m->start.x) + abs(y-m->start.y);
+        if (degree != 1 || distance < bestDistance) continue;
+        bool occupied = false;
+        for (int i=0;i<g->powerupCount;i++)
+            if (g->powerups[i].gridX==x && g->powerups[i].gridY==y) occupied=true;
+        for (int i=0;i<g->enemyCount;i++)
+            if (g->enemies[i].gridX==x && g->enemies[i].gridY==y) occupied=true;
+        for (int i=0;i<m->keyCount;i++)
+            if (m->keys[i].x==x && m->keys[i].y==y) occupied=true;
+        if (!occupied) { best=(GridNode){x,y}; bestDistance=distance; }
+    }
+    return best;
+}
+
+void configureMazeCamera(Game *g)
+{
+    if (!g || !g->maze) return;
+    float worldWidth=(float)(g->maze->width*CELL_SIZE);
+    float worldHeight=(float)(g->maze->height*CELL_SIZE);
+    float availableWidth=(float)GetScreenWidth()-64.0f;
+    float availableHeight=(float)GetScreenHeight()-100.0f;
+    if (availableWidth<1.0f) availableWidth=1.0f;
+    if (availableHeight<1.0f) availableHeight=1.0f;
+    float zoomX=availableWidth/worldWidth;
+    float zoomY=availableHeight/worldHeight;
+
+    g->camera.target=(Vector2){worldWidth/2.0f,worldHeight/2.0f};
+    g->camera.offset=(Vector2){GetScreenWidth()/2.0f,GetScreenHeight()/2.0f};
+    g->camera.rotation=0;
+    g->camera.zoom=zoomX<zoomY?zoomX:zoomY;
+}
+
 /* ---- Init / Cleanup ---- */
 
 void initGame(Game *g)
@@ -61,6 +103,7 @@ void initGame(Game *g)
     g->nameLength = (int)strlen(g->playerName);
     g->highScoreCount = loadHighScores(g->highScores, MAX_HIGH_SCORES);
     initAudio(&g->audio);
+    loadGameTextures(&g->textures);
 }
 
 void cleanupLevel(Game *g)
@@ -79,6 +122,7 @@ void cleanupGame(Game *g)
     if (g->demoMaze) { destroyMaze(g->demoMaze); g->demoMaze = NULL; }
     freeAIComparisonResults(g->aiResults);
     unloadAudio(&g->audio);
+    unloadGameTextures(&g->textures);
 }
 
 static void recordRunScore(Game *g)
@@ -147,10 +191,13 @@ void startLevel(Game *g)
         case DIFF_HARD: g->visibilityRadius=VISIBILITY_HARD; break;
         default:        g->visibilityRadius=VISIBILITY_NORMAL; break;
     }
-    g->camera.target   = (Vector2){ g->player.x, g->player.y };
-    g->camera.offset   = (Vector2){ SCREEN_WIDTH/2.0f, SCREEN_HEIGHT/2.0f };
-    g->camera.rotation = 0; g->camera.zoom = 1;
+    configureMazeCamera(g);
     g->fogEnabled = false;
+    g->decoysAvailable = PLAYER_START_DECOYS;
+    g->decoyVisibleTimer = 0;
+    g->bonusPosition = findBonusDeadEnd(g);
+    g->bonusAvailable = g->bonusPosition.x >= 0;
+    g->cameraShakeTimer = g->screenFlashTimer = 0;
     g->state = STATE_PLAYING;
     addNotification(g, TextFormat("Level %d", g->currentLevel), COLOR_TITLE);
     return;
@@ -169,7 +216,7 @@ level_fail:
 void nextLevel(Game *g)
 {
     int ls = calculateLevelScore(g->currentLevel, g->timer,
-        g->player.health, g->player.keysCollected, g->player.powerupsCollected);
+        g->player.health, g->player.keysCollected, g->player.powerupsCollected) + g->score;
     g->score = ls; g->totalScore += ls;
     if (g->currentLevel >= MAX_LEVELS) {
         recordRunScore(g);
@@ -228,6 +275,7 @@ void updateNotifications(Game *g, float dt)
 void updateGame(Game *g, float dt)
 {
     updateMusic(&g->audio);
+    updateNotifications(g, dt);
     switch (g->state) {
         case STATE_MENU:           updateMenu(g);           break;
         case STATE_DIFFICULTY:     updateDifficulty(g);     break;
@@ -258,7 +306,7 @@ void drawGameFrame(Game *g)
         case STATE_AI_DEMO:        drawAIDemo(g);         break;
         case STATE_NAME_ENTRY:     drawNameEntry(g);      break;
     }
-    if (g->showFPS) DrawFPS(10, SCREEN_HEIGHT-30);
+    if (g->showFPS) DrawFPS(10, GetScreenHeight()-30);
 }
 
 /* ---- Menu ---- */
@@ -308,7 +356,42 @@ void updatePlaying(Game *g, float dt)
     if (IsKeyPressed(KEY_F1)) g->debugMode = !g->debugMode;
     if (IsKeyPressed(KEY_F2)) g->fogEnabled = !g->fogEnabled;
 
+    int oldGridX = g->player.gridX, oldGridY = g->player.gridY;
     updatePlayer(&g->player, g->maze, dt);
+    g->worldTime += dt;
+    if (g->footstepTimer > 0) g->footstepTimer -= dt;
+    if ((oldGridX != g->player.gridX || oldGridY != g->player.gridY) && g->footstepTimer <= 0) {
+        playGameSound(&g->audio, g->audio.sndFootstep);
+        g->footstepTimer = g->player.isSprinting ? 0.17f : 0.25f;
+    }
+    if (g->decoyVisibleTimer > 0) g->decoyVisibleTimer -= dt;
+    if (g->screenFlashTimer > 0) g->screenFlashTimer -= dt;
+    if (g->pickupEffectTimer > 0) g->pickupEffectTimer -= dt;
+    if (g->cameraShakeTimer > 0) g->cameraShakeTimer -= dt;
+    for (int i=0;i<g->enemyCount;i++) if (g->enemies[i].alertTimer > 0) g->enemies[i].alertTimer -= dt;
+
+    /* Q throws a sound decoy a few cells ahead; enemies path toward the noise. */
+    if (IsKeyPressed(KEY_Q) && g->decoysAvailable > 0) {
+        int dx=(int)g->player.dirX, dy=(int)g->player.dirY;
+        if (dx==0 && dy==0) dy=1;
+        GridNode target={g->player.gridX,g->player.gridY};
+        for (int step=0;step<3;step++) {
+            if (!isCellWalkable(g->maze,target.x+dx,target.y+dy)) break;
+            target.x+=dx; target.y+=dy;
+        }
+        g->decoyPosition=target; g->decoyVisibleTimer=DECOY_VISIBLE_DURATION;
+        g->decoysAvailable--;
+        for (int i=0;i<g->enemyCount;i++) {
+            Enemy *e=&g->enemies[i];
+            e->state=AI_INVESTIGATE; e->lastKnownX=target.x*CELL_SIZE+CELL_SIZE/2.0f;
+            e->lastKnownY=target.y*CELL_SIZE+CELL_SIZE/2.0f;
+            e->searchTimer=DECOY_LURE_DURATION;
+            e->playerDetected=false; e->pathTimer=AI_UPDATE_INTERVAL;
+            free(e->path); e->path=NULL; e->pathLength=e->pathIndex=0;
+        }
+        addNotification(g,"DECOY THROWN!",COLOR_POWERUP_INVIS);
+        playGameSound(&g->audio,g->audio.sndDecoy);
+    }
 
     /* Key pickup */
     for (int i=0; i<g->maze->keyCount; i++) {
@@ -316,10 +399,16 @@ void updatePlaying(Game *g, float dt)
         if (g->maze->grid[k.y][k.x]==CELL_KEY && checkPlayerCellOverlap(&g->player,k.x,k.y)) {
             g->maze->grid[k.y][k.x] = CELL_PATH;
             g->player.keysCollected++;
+            g->pickupEffectPosition=(Vector2){k.x*CELL_SIZE+CELL_SIZE/2.0f,k.y*CELL_SIZE+CELL_SIZE/2.0f};
+            g->pickupEffectColor=COLOR_KEY; g->pickupEffectTimer=0.38f;
             addNotification(g,"KEY FOUND!",COLOR_KEY);
+            g->screenFlashTimer=0.12f; g->screenFlashColor=(Color){241,250,140,70};
             playGameSound(&g->audio,g->audio.sndPickupKey);
-            if (g->player.keysCollected>=g->keysRequired)
+            if (g->player.keysCollected>=g->keysRequired) {
                 addNotification(g,"EXIT UNLOCKED!",COLOR_EXIT_UNLOCKED);
+                g->screenFlashTimer=0.28f; g->screenFlashColor=(Color){80,250,123,85};
+                playGameSound(&g->audio,g->audio.sndExitUnlock);
+            }
         }
     }
 
@@ -329,6 +418,9 @@ void updatePlaying(Game *g, float dt)
         if (checkPlayerCellOverlap(&g->player,g->powerups[i].gridX,g->powerups[i].gridY)) {
             g->powerups[i].collected = true;
             g->player.powerupsCollected++;
+            g->pickupEffectPosition=(Vector2){g->powerups[i].x,g->powerups[i].y};
+            g->pickupEffectColor=COLOR_POWERUP_INVIS; g->pickupEffectTimer=0.38f;
+            g->screenFlashTimer=0.16f; g->screenFlashColor=(Color){139,233,253,55};
             playGameSound(&g->audio,g->audio.sndPickupPowerup);
             switch (g->powerups[i].type) {
                 case POWERUP_SPEED:        g->player.speedBoostTimer=POWERUP_SPEED_DURATION; addNotification(g,"SPEED BOOST!",COLOR_POWERUP_SPEED); break;
@@ -342,6 +434,17 @@ void updatePlaying(Game *g, float dt)
         }
     }
 
+    /* Optional cache is tucked into a dead end; reaching it pays a score bonus. */
+    if (g->bonusAvailable && checkPlayerCellOverlap(&g->player,g->bonusPosition.x,g->bonusPosition.y)) {
+        g->bonusAvailable=false; g->score+=BONUS_CACHE_SCORE;
+        g->pickupEffectPosition=(Vector2){g->bonusPosition.x*CELL_SIZE+CELL_SIZE/2.0f,
+                                           g->bonusPosition.y*CELL_SIZE+CELL_SIZE/2.0f};
+        g->pickupEffectColor=COLOR_POWERUP_SPEED; g->pickupEffectTimer=0.45f;
+        addNotification(g,"SECRET CACHE! +500",COLOR_KEY);
+        g->screenFlashTimer=0.24f; g->screenFlashColor=(Color){255,184,108,85};
+        playGameSound(&g->audio,g->audio.sndPickupPowerup);
+    }
+
     /* Exit check */
     if (checkPlayerCellOverlap(&g->player,g->maze->exitPos.x,g->maze->exitPos.y)) {
         if (g->player.keysCollected>=g->keysRequired) {
@@ -352,17 +455,25 @@ void updatePlaying(Game *g, float dt)
 
     /* Enemies */
     for (int i=0; i<g->enemyCount; i++) {
+        EnemyAIState oldState=g->enemies[i].state;
         if (g->enemies[i].updateAI)
             g->enemies[i].updateAI(&g->enemies[i],&g->player,g->maze,dt);
+        if (oldState!=AI_CHASE && g->enemies[i].state==AI_CHASE) {
+            g->enemies[i].alertTimer=1.3f;
+            addNotification(g,"ENEMY SPOTTED!",COLOR_ENEMY_BFS);
+            playGameSound(&g->audio,g->audio.sndEnemyDetect);
+        }
         if (checkPlayerEnemyCollision(&g->player,&g->enemies[i])) {
             if (g->player.invincibilityTimer<=0 && g->player.invisibilityTimer<=0) {
                 g->player.health -= ENEMY_DAMAGE;
                 g->player.invincibilityTimer = PLAYER_INVINCIBILITY;
+                g->screenFlashTimer=0.22f; g->screenFlashColor=(Color){255,85,85,100};
+                g->cameraShakeTimer=0.22f; g->cameraShakeIntensity=6.0f;
                 addNotification(g,"DAMAGE!",COLOR_ENEMY_BFS);
                 playGameSound(&g->audio,g->audio.sndDamage);
                 if (g->player.health<=0) {
                     g->player.health=0;
-                    g->score=calculateLevelScore(g->currentLevel,g->timer,0,g->player.keysCollected,g->player.powerupsCollected);
+                    g->score+=calculateLevelScore(g->currentLevel,g->timer,0,g->player.keysCollected,g->player.powerupsCollected);
                     g->totalScore+=g->score;
                     playGameSound(&g->audio,g->audio.sndGameOver);
                     recordRunScore(g);
@@ -376,7 +487,7 @@ void updatePlaying(Game *g, float dt)
     g->timer -= dt;
     if (g->timer<=0) {
         g->timer=0;
-        g->score=calculateLevelScore(g->currentLevel,0,g->player.health,g->player.keysCollected,g->player.powerupsCollected);
+        g->score+=calculateLevelScore(g->currentLevel,0,g->player.health,g->player.keysCollected,g->player.powerupsCollected);
         g->totalScore+=g->score;
         playGameSound(&g->audio,g->audio.sndGameOver);
         recordRunScore(g);
@@ -384,8 +495,9 @@ void updatePlaying(Game *g, float dt)
     }
 
     computeVisibility(g);
-    g->camera.target = (Vector2){ g->player.x, g->player.y };
-    updateNotifications(g, dt);
+    float shake=g->cameraShakeTimer>0?g->cameraShakeIntensity*(g->cameraShakeTimer/0.22f):0;
+    g->camera.offset=(Vector2){GetScreenWidth()/2.0f+sinf(g->worldTime*91.0f)*shake,
+                               GetScreenHeight()/2.0f+cosf(g->worldTime*79.0f)*shake};
 }
 
 /* ---- Pause ---- */
